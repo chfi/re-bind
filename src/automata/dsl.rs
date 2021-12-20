@@ -18,6 +18,28 @@ pub struct DslState {
 }
 
 impl DslState {
+
+    pub fn debug_print(&self) {
+        let states = self.states.lock();
+        let inputs = self.inputs.lock();
+        let outputs = self.outputs.lock();
+
+        println!("States:");
+        for (name, id) in states.iter() {
+            println!(" {} -> {:?}", name, id);
+        }
+
+        println!("Inputs:");
+        for (name, id) in inputs.iter() {
+            println!(" {} -> {:?}", name, id);
+        }
+
+        println!("Outputs:");
+        for (name, id) in outputs.iter() {
+            println!(" {} -> {:?}", name, id);
+        }
+    }
+
     pub fn get_state(&self, name: &str) -> StateId {
         let mut states = self.states.lock();
 
@@ -62,6 +84,7 @@ impl DslState {
         let cloned =self.clone();
 
         engine.on_var(move |name, index, ctx| {
+            println!("on_var called with {}", name);
             if name.starts_with("S_") {
                 let state_id = cloned.get_state(name);
                 Ok(Some(rhai::Dynamic::from(state_id)))
@@ -74,6 +97,23 @@ impl DslState {
             } else {
                 Ok(None)
             }
+        });
+
+        engine.register_fn("emit", |src, input, tgt, output| {
+            let src: StateId = rhai::Dynamic::cast(src);
+            let input: InputId = rhai::Dynamic::cast(input);
+            let tgt: StateId = rhai::Dynamic::cast(tgt);
+            let output: OutputId = rhai::Dynamic::cast(output);
+
+            println!("emitting");
+        });
+
+        engine.register_fn("silent", |src, input, tgt| {
+            let src: StateId = rhai::Dynamic::cast(src);
+            let input: InputId = rhai::Dynamic::cast(input);
+            let tgt: StateId = rhai::Dynamic::cast(tgt);
+
+            println!("silent");
         });
 
         engine

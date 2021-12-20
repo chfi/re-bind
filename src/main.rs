@@ -33,6 +33,21 @@ fn main() {
     // let keyboard =sdl_context.keyboard().unwrap();
     let mut epump = sdl_context.event_pump().unwrap();
 
+    let dsl = rmap::automata::dsl::DslState::default();
+
+    let engine = dsl.create_engine();
+
+    let ast = engine.compile_file("./src/automata/example.rhai".into()).unwrap();
+
+    let mut scope = rhai::Scope::new();
+
+    let result: std::result::Result<(), _> = engine.call_fn(&mut scope, &ast, "machine", ());
+    // engine.eval_ast(ast)
+
+    println!("{:?}", result);
+
+    dsl.debug_print();
+
     // let mut window = sdl2::video::WindowBuilder::new(&vid, "idk what im doing", 1, 1);
     //window.hidden();
     // let window = window.build().unwrap();
