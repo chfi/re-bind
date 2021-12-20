@@ -1,3 +1,4 @@
+use rmap::automata::OutputId;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Scancode;
@@ -12,6 +13,8 @@ use winapi::{
 };
 
 use crossbeam::channel;
+
+use rmap::automata::{Automata, AutomataBuilder};
 
 pub enum Commands {
     Bind { id: u32, tgt: String },
@@ -30,13 +33,14 @@ fn main() {
     // let keyboard =sdl_context.keyboard().unwrap();
     let mut epump = sdl_context.event_pump().unwrap();
 
-    let mut window = sdl2::video::WindowBuilder::new(&vid, "idk what im doing", 1, 1);
+    // let mut window = sdl2::video::WindowBuilder::new(&vid, "idk what im doing", 1, 1);
     //window.hidden();
-    let window = window.build().unwrap();
+    // let window = window.build().unwrap();
 
     let is_en = epump.is_event_enabled(sdl2::event::EventType::KeyDown);
     println!("key down enabled: {}", is_en);
 
+    /*
     let code = 0x41;
     println!("sending A down in 1 sec");
     sleep(Duration::from_millis(1000));
@@ -51,6 +55,7 @@ fn main() {
     println!("sending A up in 1 sec");
     sleep(Duration::from_millis(1000));
     send_keybd_input(KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, code);
+    */
 
     let (msg_tx, msg_rx) = channel::unbounded::<Commands>();
 
@@ -58,6 +63,75 @@ fn main() {
     for e in epump.poll_iter() {
         println!("{:?}", e);
     }
+
+    let mut autos: Vec<Automata> = Vec::new();
+
+    let automata = {
+        use sdl2::controller::Button;
+        let mut builder = AutomataBuilder::default();
+
+        /*
+        let (in_a_down, in_a_up) = builder.new_input(Button::A);
+
+        dbg!(in_a_down);
+        dbg!(in_a_up);
+
+        let s_0 = builder.new_state();
+        let s_a = builder.new_state();
+
+        dbg!(s_0.id);
+        dbg!(s_a.id);
+
+        let out_a = builder.new_output();
+        let out_0 = builder.new_output();
+
+        dbg!(out_a.id);
+        dbg!(out_0.id);
+
+        s_0.transition(in_a_down, s_a.id, out_a.id);
+        s_a.transition(in_a_up, s_0.id, out_0.id);
+        */
+        println!("------ inputs -------");
+
+        let (in_a_down, in_a_up) = builder.new_input(Button::A);
+        let (in_r_down, in_r_up) = builder.new_input(Button::B);
+        // let (in_r_down, in_r_up) = builder.new_input(Button::RightShoulder);
+        println!();
+
+        println!("------ outputs -------");
+        let out_a = builder.new_output();
+        let out_ra = builder.new_output();
+        let out_r = builder.new_output();
+        let out_r0 = builder.new_output();
+        println!();
+
+        println!("------ states -------");
+        let s_0 = builder.new_state();
+        println!("state 0: {:?}", s_0.id);
+        let s_r = builder.new_state();
+        println!("state B held: {:?}", s_r.id);
+        let s_0a = builder.new_state();
+        println!("state 0, A pressed: {:?}", s_0a.id);
+        let s_ra = builder.new_state();
+        println!("state B held, A pressed: {:?}", s_ra.id);
+        println!();
+
+        // s_0.silent(in_r_down, s_r.id);
+        s_0.transition(in_r_down, s_r.id, out_r.id);
+        s_0.transition(in_a_down, s_0a.id, out_a.id);
+
+        // s_r.silent(in_r_up, s_0.id);
+        s_r.transition(in_r_up, s_0.id, out_r0.id);
+        s_0a.silent(in_a_up, s_0.id);
+        // s_0a.transition(in_a_up, s_0.id, out_a.id);
+
+        s_r.transition(in_a_down, s_ra.id, out_ra.id);
+        s_ra.silent(in_a_up, s_r.id);
+
+        Automata::from_builder(builder)
+    };
+
+    autos.push(automata);
 
     let pad = stick.open(0).unwrap();
     let pad0 = gc.open(0).unwrap();
@@ -109,16 +183,43 @@ fn main() {
                     which,
                     button,
                 } => {
-                    //
-                    println!("{:?}", e);
+                    println!("button down!");
+                    for auto in autos.iter_mut() {
+                        let input_id = auto.map_input(*button, true);
+                        println!("mapped input: {:?}", input_id);
+                        let output = auto.step(*button, true);
+
+                        match output {
+                            Some(OutputId(0)) => {
+                                println!("Just A down");
+                            }
+                            Some(OutputId(1)) => {
+                                println!("Just A up");
+                            }
+                            Some(OutputId(2)) => {
+                                println!("L + A down");
+                            }
+                            Some(OutputId(3)) => {
+                                println!("L + A up");
+                            }
+                            _ =>(),
+
+                        }
+                        println!("binding output: {:?}", output)
+                    }
                 }
                 Event::ControllerButtonUp {
                     timestamp,
                     which,
                     button,
                 } => {
-                    //
-                    println!("{:?}", e);
+                    println!("button up!");
+                    for auto in autos.iter_mut() {
+                        let input_id = auto.map_input(*button, false);
+                        println!("mapped input: {:?}", input_id);
+                        let output = auto.step(*button, false);
+                        println!("binding output: {:?}", output)
+                    }
                 }
                 Event::ControllerDeviceAdded { timestamp, which } => {
                     //

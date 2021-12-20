@@ -9,75 +9,77 @@ use parking_lot::Mutex;
 
 use anyhow::Result;
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateId(usize);
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct OutputId(usize);
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct OutputId(pub usize);
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InputId(usize);
 
 pub enum Output {
     Callback(Box<dyn Fn() + Send + Sync + 'static>),
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct TransitionDef {
-    tgt: StateId,
-    input: InputId,
-    output: Option<OutputId>,
+    pub tgt: StateId,
+    // pub input: InputId,
+    pub output: Option<OutputId>,
 }
 
 // pub enum Input
 
 // pub struct InputDef {
 //     id: InputId,
-//     button: 
+//     button:
 // }
 
 #[derive(Clone)]
 pub struct StateDef {
-    id: StateId,
-    transitions: Arc<Mutex<Vec<TransitionDef>>>,
+    pub id: StateId,
+    transitions: Arc<Mutex<FxHashMap<InputId, TransitionDef>>>,
 }
 
 impl StateDef {
-    pub fn transition(&mut self, input: InputId, tgt: StateId, output: OutputId) {
+    pub fn transition(&self, input: InputId, tgt: StateId, output: OutputId) {
+        println!("transition: {:?} ({:?}) -> {:?}\t{:?}", self.id, input, tgt, output);
         let mut transitions = self.transitions.lock();
         let def = TransitionDef {
             tgt,
-            input,
             output: Some(output),
         };
-        transitions.push(def);
+        transitions.insert(input, def);
     }
 
-    pub fn silent(&mut self, input: InputId, tgt: StateId) {
+    pub fn silent(&self, input: InputId, tgt: StateId) {
+        println!("transition: {:?} ({:?}) -> {:?}\t(Silent)", self.id, input, tgt);
         let mut transitions = self.transitions.lock();
         let def = TransitionDef {
             tgt,
-            input,
             output: None,
         };
-        transitions.push(def);
+        transitions.insert(input, def);
     }
 }
 
 #[derive(Clone)]
 pub struct OutputDef {
-    id: OutputId,
+    pub id: OutputId,
     output: Arc<Mutex<Option<Output>>>,
 }
 
 #[derive(Default, Clone)]
 pub struct State {
     // transitions: Vec<(StateId, Option<Output>)>,
-    transitions: Vec<(StateId, Option<OutputId>)>,
+    // transitions: Vec<(usize, Option<OutputId>)>,
+    transitions: FxHashMap<InputId, (usize, Option<OutputId>)>,
     // the outputId version may be faster, by having all the output
     // callbacks live on the same thread, and be called from the same place, signaled from here
 }
 
+/*
 impl State {
     pub fn from_def(def: StateDef) -> Self {
         let mut ts_lock = def.transitions.lock();
@@ -89,6 +91,7 @@ impl State {
         Self { transitions }
     }
 }
+*/
 
 // this could be a more efficient representation, maybe -- or at least fast
 pub struct LilAutomata {
@@ -98,35 +101,57 @@ pub struct LilAutomata {
 }
 
 pub struct Automata<Btn = sdl2::controller::Button> {
-    active: StateId,
+    // active: StateId,
+    active: usize,
     states: Vec<State>,
-    inputs: FxHashMap<Btn, InputId>,
+    inputs: FxHashMap<(Btn, bool), InputId>,
     outputs: Vec<Output>,
     // outputs: Arc<Vec<Output>>,
 }
 
 // impl<Btn: std::hash::Hash + Eq> Automata<Btn> {
 impl Automata {
-    pub fn step(&mut self, input: sdl2::controller::Button) -> Option<OutputId> {
-        let input = self.inputs.get(&input)?;
-        let state = self.states.get(self.active.0)?;
-        let (tgt, out) = state.transitions.get(input.0)?;
+
+    pub fn map_input(&self, input: sdl2::controller::Button, down: bool) -> Option<InputId> {
+        self.inputs.get(&(input, down)).copied()
+    }
+
+    pub fn step(&mut self, input: sdl2::controller::Button, down: bool) -> Option<OutputId> {
+        let prev_state = self.active;
+
+        println!("{:?}, {:?}, {}", prev_state, input, down);
+        let input = self.inputs.get(&(input, down))?;
+
+        let state = self.states.get(self.active)?;
+
+        let (tgt, out) = state.transitions.get(input)?;
         let out = *out;
+
         self.active = *tgt;
+
+        println!(" > {:?} -> {:?}\t{:?}, {}\t", prev_state, tgt, input, down);
+
         return out;
     }
 
     pub fn from_builder(builder: AutomataBuilder) -> Self {
-        let active = StateId(0);
-
         let input_count = builder.inputs.len();
         let mut inputs: FxHashMap<_, InputId> = FxHashMap::default();
         let mut input_map: FxHashMap<InputId, usize> = FxHashMap::default();
         for (&input, def) in builder.inputs.iter() {
             input_map.insert(input, input_map.len());
-            inputs.insert(def.button, input);
+            inputs.insert((def.button, def.down), input);
+            
+            println!("{:?}", inputs.get(&(def.button, true)));
+            println!("{:?}", inputs.get(&(def.button, false)));
         }
 
+        let mut inputs_by_ix = input_map.iter().map(|(a, b)| (*a, *b)).collect::<Vec<_>>();
+        inputs_by_ix.sort_by_key(|(_, a)| *a);
+        let inputs_by_ix = inputs_by_ix.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
+
+        println!("input_map.len() {}", input_map.len());
+        println!("inputs.len() {}", inputs.len());
         let mut outputs: Vec<Output> = Vec::new();
 
         let mut output_map: FxHashMap<OutputId, usize> = FxHashMap::default();
@@ -144,27 +169,73 @@ impl Automata {
 
         let state_count = builder.states.len();
         let mut state_map: FxHashMap<StateId, usize> = FxHashMap::default();
+        let mut counttt =0;
         for (&id, state) in builder.states.iter() {
             state_map.insert(id, state_map.len());
+            counttt += 1;
         }
+        println!("{}\t{}", counttt, state_map.len());
 
         let mut states = Vec::new();
 
         let mut state_ids = state_map.iter().map(|(a, b)| (*a, *b)).collect::<Vec<_>>();
         state_ids.sort_by_key(|(_, b)| *b);
 
+        // println!("what the fuuuuck");
+        println!("{:?}", state_ids);
+
         let mut count = 0;
 
-        for (id, ix) in state_ids {
+
+        for (state_id, ix) in state_ids {
             assert!(count == ix);
             count += 1;
-            let def = builder.states.get(&id).unwrap();
-            let state = State::from_def(def.to_owned());
+            let def = builder.states.get(&state_id).unwrap();
+
+            let ts = def.transitions.lock();
+
+            let transitions = ts.iter().map(|(k, v)| {
+
+                let tgt = state_map.get(&v.tgt).unwrap();
+
+                let out = v.output;
+
+                (*k, (*tgt, out))
+            }).collect();
+
+            /*
+            let mut transitions = inputs_by_ix.iter().map(|id| {
+                if let Some(tdef) = ts.get(id) {
+                    let tgt = state_map.get(&tdef.tgt).unwrap();
+                    let out = tdef.output;
+                    // println!("state {:?}\tinput {:?}\tdef {:?}", state_id, id, tdef);
+                    // println!("{:?}", (tgt, out));
+                    (*tgt, out)
+                } else {
+                    (ix, None)
+                }
+            }).collect();
+
+
+            println!("state: {:?}\t{:?}", state_id, transitions);
+            */
+
+            // let transitions = ts.iter().enumerate().map(|(ix, transition)| {
+                /*
+            let transitions = ts.iter().map(|(input, t)| {
+                let tgt = state_map.get(&t.tgt).unwrap();
+                let out = t.output;
+                (*tgt, out)
+            }).collect();
+            */
+
+            let state = State { transitions };
+
             states.push(state);
         }
 
         Automata {
-            active,
+            active: 0,
             states,
             inputs,
             outputs,
@@ -173,8 +244,9 @@ impl Automata {
 }
 
 pub struct InputDef<Btn = sdl2::controller::Button> {
-    id: InputId,
-    button: Btn,
+    pub id: InputId,
+    pub button: Btn,
+    pub down: bool,
 }
 
 #[derive(Default)]
@@ -190,24 +262,38 @@ impl AutomataBuilder {
         let id = StateId(self.states.len());
         let def = StateDef {
             id,
-            transitions: Arc::new(Mutex::new(Vec::new())),
+            transitions: Arc::new(Mutex::new(FxHashMap::default())),
         };
         self.states.insert(id, def.clone());
         def
     }
 
-    pub fn new_input(&mut self, button: sdl2::controller::Button) -> InputId {
-        let id = InputId(self.inputs.len());
+    pub fn new_input(&mut self, button: sdl2::controller::Button) -> (InputId, InputId) {
+
+        let id_down = InputId(self.inputs.len());
         let def = InputDef {
-            id,
+            id: id_down,
             button,
+            down: true,
         };
-        self.inputs.insert(id, def);
-        id
+        self.inputs.insert(id_down, def);
+
+        let id_up = InputId(self.inputs.len());
+        let def = InputDef {
+            id: id_up,
+            button,
+            down: false,
+        };
+        self.inputs.insert(id_up, def);
+
+        println!("{:?} down -> {:?}", button, id_down);
+        println!("{:?} up -> {:?}", button, id_up);
+
+        (id_down, id_up)
     }
 
     pub fn new_output(&mut self) -> OutputDef {
-        let id = OutputId(self.states.len());
+        let id = OutputId(self.outputs.len());
         let def = OutputDef {
             id,
             output: Arc::new(Mutex::new(None)),
