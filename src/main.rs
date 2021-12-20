@@ -1,4 +1,5 @@
 use rmap::automata::OutputId;
+use rustc_hash::FxHashMap;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Scancode;
@@ -127,23 +128,13 @@ fn main() {
                         println!("mapped input: {:?}", input_id);
                         let output = auto.step(&(*button, true));
 
-                        match output {
-                            Some(OutputId(0)) => {
-                                println!("Just A down");
-                            }
-                            Some(OutputId(1)) => {
-                                println!("Just A up");
-                            }
-                            Some(OutputId(2)) => {
-                                println!("L + A down");
-                            }
-                            Some(OutputId(3)) => {
-                                println!("L + A up");
-                            }
-                            _ => (),
+                        let outputs_inv = auto.output_names.iter().map(|(a, b)| (*b, a)).collect::<FxHashMap<_, _>>();
+
+                        if let Some(output) = output {
+                            let name = outputs_inv.get(&output);
+                            println!("Triggered output: {:?}", name);
                         }
 
-                        println!("binding output: {:?}", output)
                     }
                 }
                 Event::ControllerButtonUp {
@@ -156,7 +147,13 @@ fn main() {
                         let input_id = auto.map_input(&(*button, false));
                         println!("mapped input: {:?}", input_id);
                         let output = auto.step(&(*button, false));
-                        println!("binding output: {:?}", output)
+
+                        let outputs_inv = auto.output_names.iter().map(|(a, b)| (*b, a)).collect::<FxHashMap<_, _>>();
+
+                        if let Some(output) = output {
+                            let name = outputs_inv.get(&output);
+                            println!("Triggered output: {:?}", name);
+                        }
                     }
                 }
                 Event::ControllerDeviceAdded { timestamp, which } => {

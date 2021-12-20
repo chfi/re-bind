@@ -121,10 +121,29 @@ impl<T: Copy + std::hash::Hash + Eq> DslState<T> {
 
         for (state_id, state_ts) in state_transitions.iter() {
             let ix = states.len();
+            state_map.insert(*state_id, ix);
+            states.push(State { transitions: FxHashMap::default() });
+        }
+
+        for (state_id, state_ts) in state_transitions.iter() {
+            // let ix = states.len();
 
             let ts: &FxHashMap<InputId, (StateId, Option<OutputId>)> = state_ts;
 
-            state_map.insert(*state_id, ix);
+            let state = states.get_mut(*state_map.get(state_id).unwrap()).unwrap();
+            // let transitions = FxHashMap::default();
+
+            let transitions = &mut state.transitions;
+
+            for (input, (tgt, out)) in ts {
+
+                let tgt_ix =state_map.get(tgt).unwrap();
+                transitions.insert(*input, (*tgt_ix, *out));
+            }
+
+            // states.push(State {transitions: ts.clone()});
+
+            // state_map.insert(*state_id, ix);
         }
 
         let input_map = self.input_map.lock().clone();

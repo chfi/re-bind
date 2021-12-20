@@ -92,9 +92,9 @@ pub struct Automata<Btn = (sdl2::controller::Button, bool)> {
     states: Vec<State>,
     input_map: FxHashMap<Btn, InputId>,
 
-    state_names: FxHashMap<String, StateId>,
-    input_names: FxHashMap<String, InputId>,
-    output_names: FxHashMap<String, OutputId>,
+    pub state_names: FxHashMap<String, StateId>,
+    pub input_names: FxHashMap<String, InputId>,
+    pub output_names: FxHashMap<String, OutputId>,
     // outputs: Arc<Vec<Output>>,
 }
 
