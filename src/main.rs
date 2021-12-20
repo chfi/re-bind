@@ -29,48 +29,11 @@ fn main() {
     let stick = sdl_context.joystick().unwrap();
     let events = sdl_context.event().unwrap();
     let vid = sdl_context.video().unwrap();
-    // let mouse = sdl_context.mouse().unwrap();
-    // let keyboard =sdl_context.keyboard().unwrap();
+    
     let mut epump = sdl_context.event_pump().unwrap();
 
-    let dsl = rmap::automata::dsl::DslState::default();
-
-    let engine = dsl.create_engine();
-
-    let ast = engine.compile_file("./src/automata/example.rhai".into()).unwrap();
-
-    let mut scope = rhai::Scope::new();
-
-    let result: std::result::Result<(), _> = engine.call_fn(&mut scope, &ast, "machine", ());
-    // engine.eval_ast(ast)
-
-    println!("{:?}", result);
-
-    dsl.debug_print();
-
-    // let mut window = sdl2::video::WindowBuilder::new(&vid, "idk what im doing", 1, 1);
-    //window.hidden();
-    // let window = window.build().unwrap();
 
     let is_en = epump.is_event_enabled(sdl2::event::EventType::KeyDown);
-    println!("key down enabled: {}", is_en);
-
-    /*
-    let code = 0x41;
-    println!("sending A down in 1 sec");
-    sleep(Duration::from_millis(1000));
-    send_keybd_input(KEYEVENTF_SCANCODE, code);
-    // sleep(Duration::from_millis(10));
-    // send_keybd_input(KEYEVENTF_SCANCODE, code);
-    // sleep(Duration::from_millis(10));
-    // send_keybd_input(KEYEVENTF_SCANCODE, code);
-    // sleep(Duration::from_millis(10));
-    // send_keybd_input(KEYEVENTF_SCANCODE, code);
-
-    println!("sending A up in 1 sec");
-    sleep(Duration::from_millis(1000));
-    send_keybd_input(KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP, code);
-    */
 
     let (msg_tx, msg_rx) = channel::unbounded::<Commands>();
 
@@ -81,31 +44,29 @@ fn main() {
 
     let mut autos: Vec<Automata> = Vec::new();
 
+
     let automata = {
         use sdl2::controller::Button;
-        let mut builder = AutomataBuilder::default();
 
-        let (in_a_down, in_a_up) = builder.new_input(Button::A);
-        let (in_r_down, in_r_up) = builder.new_input(Button::RightShoulder);
+        let dsl = rmap::automata::dsl::DslState::default();
 
-        let out_a = builder.new_output();
-        let out_ra = builder.new_output();
+        let engine = dsl.create_engine();
 
-        let s_0 = builder.new_state();
-        let s_r = builder.new_state();
-        let s_0a = builder.new_state();
-        let s_ra = builder.new_state();
+        let ast = engine
+            .compile_file("./src/automata/example.rhai".into())
+            .unwrap();
 
-        s_0.silent(in_r_down, s_r.id);
-        s_0.transition(in_a_down, s_0a.id, out_a.id);
+        let mut scope = rhai::Scope::new();
 
-        s_r.silent(in_r_up, s_0.id);
-        s_0a.silent(in_a_up, s_0.id);
+        let result: std::result::Result<(), _> = engine.call_fn(&mut scope, &ast, "machine", ());
 
-        s_r.transition(in_a_down, s_ra.id, out_ra.id);
-        s_ra.silent(in_a_up, s_r.id);
+        dsl.bind_ast(&ast);
 
-        Automata::from_builder(builder)
+        println!("{:?}", result);
+
+        dsl.debug_print();
+
+        dsl.build()
     };
 
     autos.push(automata);
@@ -162,9 +123,9 @@ fn main() {
                 } => {
                     println!("button down!");
                     for auto in autos.iter_mut() {
-                        let input_id = auto.map_input(*button, true);
+                        let input_id = auto.map_input(&(*button, true));
                         println!("mapped input: {:?}", input_id);
-                        let output = auto.step(*button, true);
+                        let output = auto.step(&(*button, true));
 
                         match output {
                             Some(OutputId(0)) => {
@@ -179,9 +140,9 @@ fn main() {
                             Some(OutputId(3)) => {
                                 println!("L + A up");
                             }
-                            _ =>(),
-
+                            _ => (),
                         }
+
                         println!("binding output: {:?}", output)
                     }
                 }
@@ -192,9 +153,9 @@ fn main() {
                 } => {
                     println!("button up!");
                     for auto in autos.iter_mut() {
-                        let input_id = auto.map_input(*button, false);
+                        let input_id = auto.map_input(&(*button, false));
                         println!("mapped input: {:?}", input_id);
-                        let output = auto.step(*button, false);
+                        let output = auto.step(&(*button, false));
                         println!("binding output: {:?}", output)
                     }
                 }
@@ -210,11 +171,21 @@ fn main() {
                     //
                     println!("{:?}", e);
                 }
-                Event::TextEditing { timestamp, window_id, text, start, length } => {
+                Event::TextEditing {
+                    timestamp,
+                    window_id,
+                    text,
+                    start,
+                    length,
+                } => {
                     //
                     println!("{:?}", e);
                 }
-                Event::TextInput { timestamp, window_id, text } => {
+                Event::TextInput {
+                    timestamp,
+                    window_id,
+                    text,
+                } => {
                     //
                     println!("{:?}", e);
                 }
@@ -267,7 +238,6 @@ fn main() {
     // println!("here we go again");
 }
 
-
 fn send_mouse_input(flags: u32, data: u32, dx: i32, dy: i32) {
     let mut input = INPUT {
         type_: INPUT_MOUSE,
@@ -282,7 +252,13 @@ fn send_mouse_input(flags: u32, data: u32, dx: i32, dy: i32) {
             })
         },
     };
-    unsafe { SendInput(1, &mut input as LPINPUT, std::mem::size_of::<INPUT>() as c_int) };
+    unsafe {
+        SendInput(
+            1,
+            &mut input as LPINPUT,
+            std::mem::size_of::<INPUT>() as c_int,
+        )
+    };
 }
 
 fn send_keybd_input(flags: u32, key_code: u64) {
@@ -298,5 +274,11 @@ fn send_keybd_input(flags: u32, key_code: u64) {
             })
         },
     };
-    unsafe { SendInput(1, &mut input as LPINPUT, std::mem::size_of::<INPUT>() as c_int) };
+    unsafe {
+        SendInput(
+            1,
+            &mut input as LPINPUT,
+            std::mem::size_of::<INPUT>() as c_int,
+        )
+    };
 }

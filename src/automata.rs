@@ -9,7 +9,6 @@ use parking_lot::Mutex;
 
 pub mod dsl;
 
-
 use anyhow::Result;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -40,7 +39,10 @@ pub struct StateDef {
 
 impl StateDef {
     pub fn transition(&self, input: InputId, tgt: StateId, output: OutputId) {
-        println!("transition: {:?} ({:?}) -> {:?}\t{:?}", self.id, input, tgt, output);
+        println!(
+            "transition: {:?} ({:?}) -> {:?}\t{:?}",
+            self.id, input, tgt, output
+        );
         let mut transitions = self.transitions.lock();
         let def = TransitionDef {
             tgt,
@@ -50,12 +52,12 @@ impl StateDef {
     }
 
     pub fn silent(&self, input: InputId, tgt: StateId) {
-        println!("transition: {:?} ({:?}) -> {:?}\t(Silent)", self.id, input, tgt);
+        println!(
+            "transition: {:?} ({:?}) -> {:?}\t(Silent)",
+            self.id, input, tgt
+        );
         let mut transitions = self.transitions.lock();
-        let def = TransitionDef {
-            tgt,
-            output: None,
-        };
+        let def = TransitionDef { tgt, output: None };
         transitions.insert(input, def);
     }
 }
@@ -75,7 +77,6 @@ pub struct State {
     // callbacks live on the same thread, and be called from the same place, signaled from here
 }
 
-
 /*
 // this could be a more efficient representation, maybe -- or at least fast
 pub struct LilAutomata {
@@ -85,27 +86,28 @@ pub struct LilAutomata {
 }
 */
 
-pub struct Automata<Btn = sdl2::controller::Button> {
+pub struct Automata<Btn = (sdl2::controller::Button, bool)> {
     // active: StateId,
     active: usize,
     states: Vec<State>,
-    inputs: FxHashMap<(Btn, bool), InputId>,
-    outputs: Vec<Output>,
+    input_map: FxHashMap<Btn, InputId>,
+
+    state_names: FxHashMap<String, StateId>,
+    input_names: FxHashMap<String, InputId>,
+    output_names: FxHashMap<String, OutputId>,
     // outputs: Arc<Vec<Output>>,
 }
 
-// impl<Btn: std::hash::Hash + Eq> Automata<Btn> {
-impl Automata {
-
-    pub fn map_input(&self, input: sdl2::controller::Button, down: bool) -> Option<InputId> {
-        self.inputs.get(&(input, down)).copied()
+impl<In: std::hash::Hash + Eq> Automata<In> {
+    pub fn map_input(&self, input: &In) -> Option<InputId> {
+        self.input_map.get(input).copied()
     }
 
-    pub fn step(&mut self, input: sdl2::controller::Button, down: bool) -> Option<OutputId> {
+    pub fn step(&mut self, input: &In) -> Option<OutputId> {
         let prev_state = self.active;
 
-        println!("{:?}, {:?}, {}", prev_state, input, down);
-        let input = self.inputs.get(&(input, down))?;
+        // println!("{:?}, {:?}", prev_state, input);
+        let input = self.input_map.get(input)?;
 
         let state = self.states.get(self.active)?;
 
@@ -114,11 +116,13 @@ impl Automata {
 
         self.active = *tgt;
 
-        println!(" > {:?} -> {:?}\t{:?}, {}\t", prev_state, tgt, input, down);
+        // println!(" > {:?} -> {:?}\t{:?}", prev_state, tgt, input);
 
         return out;
     }
+}
 
+impl Automata {
     pub fn from_builder(builder: AutomataBuilder) -> Self {
         let input_count = builder.inputs.len();
         let mut inputs: FxHashMap<_, InputId> = FxHashMap::default();
@@ -126,14 +130,17 @@ impl Automata {
         for (&input, def) in builder.inputs.iter() {
             input_map.insert(input, input_map.len());
             inputs.insert((def.button, def.down), input);
-            
+
             println!("{:?}", inputs.get(&(def.button, true)));
             println!("{:?}", inputs.get(&(def.button, false)));
         }
 
         let mut inputs_by_ix = input_map.iter().map(|(a, b)| (*a, *b)).collect::<Vec<_>>();
         inputs_by_ix.sort_by_key(|(_, a)| *a);
-        let inputs_by_ix = inputs_by_ix.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
+        let inputs_by_ix = inputs_by_ix
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>();
 
         println!("input_map.len() {}", input_map.len());
         println!("inputs.len() {}", inputs.len());
@@ -154,7 +161,7 @@ impl Automata {
 
         let state_count = builder.states.len();
         let mut state_map: FxHashMap<StateId, usize> = FxHashMap::default();
-        let mut counttt =0;
+        let mut counttt = 0;
         for (&id, state) in builder.states.iter() {
             state_map.insert(id, state_map.len());
             counttt += 1;
@@ -171,7 +178,6 @@ impl Automata {
 
         let mut count = 0;
 
-
         for (state_id, ix) in state_ids {
             assert!(count == ix);
             count += 1;
@@ -179,15 +185,16 @@ impl Automata {
 
             let ts = def.transitions.lock();
 
-            let transitions = ts.iter().map(|(k, v)| {
+            let transitions = ts
+                .iter()
+                .map(|(k, v)| {
+                    let tgt = state_map.get(&v.tgt).unwrap();
 
-                let tgt = state_map.get(&v.tgt).unwrap();
+                    let out = v.output;
 
-                let out = v.output;
-
-                (*k, (*tgt, out))
-            }).collect();
-
+                    (*k, (*tgt, out))
+                })
+                .collect();
 
             let state = State { transitions };
 
@@ -197,8 +204,11 @@ impl Automata {
         Automata {
             active: 0,
             states,
-            inputs,
-            outputs,
+            input_map: inputs,
+
+            state_names: FxHashMap::default(),
+            input_names: FxHashMap::default(),
+            output_names: FxHashMap::default(),
         }
     }
 }
@@ -229,7 +239,6 @@ impl AutomataBuilder {
     }
 
     pub fn new_input(&mut self, button: sdl2::controller::Button) -> (InputId, InputId) {
-
         let id_down = InputId(self.inputs.len());
         let def = InputDef {
             id: id_down,

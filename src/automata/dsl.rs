@@ -7,18 +7,77 @@ use super::*;
 
 type LockMap<K, V> = Arc<Mutex<FxHashMap<K, V>>>;
 
-#[derive(Clone, Default)]
-pub struct DslState {
+#[derive(Clone)]
+pub struct DslState<Btn = (sdl2::controller::Button, bool)> {
     // builder: Arc<Mutex<AutomataBuilder>>,
     states: LockMap<String, StateId>,
     inputs: LockMap<String, InputId>,
     outputs: LockMap<String, OutputId>,
 
     state_transitions: LockMap<StateId, LockMap<InputId, (StateId, Option<OutputId>)>>,
+
+    input_map: LockMap<Btn, InputId>,
 }
 
 impl DslState {
-    pub fn build<T: Copy + std::hash::Hash + Eq>(&self) -> Automata<T> {
+    pub fn bind_ast(&self, ast: &rhai::AST) -> Result<()> {
+        let mut engine = self.create_engine();
+
+        let mut scope = rhai::Scope::new();
+
+        let module = rhai::Module::eval_ast_as_new(scope, ast, &engine)?;
+
+        let mut input_map = self.input_map.lock();
+
+        println!("{:?}", ast);
+
+        for (var_name, var) in module.iter_var() {
+            let var = var.clone();
+            if let Some(input_id) = var.try_cast::<InputId>() {
+                println!("iter vars: {}, {:?}", var_name, input_id);
+
+                use sdl2::controller::Button;
+
+                match var_name {
+                    "RIGHT_SHOULDER_DOWN" => {
+                        dbg!();
+                        input_map.insert((Button::RightShoulder, true), input_id);
+                    }
+                    "RIGHT_SHOULDER_UP" => {
+                        dbg!();
+                        input_map.insert((Button::RightShoulder, false), input_id);
+                    }
+                    "A_DOWN" => {
+                        dbg!();
+                        input_map.insert((Button::A, true), input_id);
+                    }
+                    "A_UP" => {
+                        dbg!();
+                        input_map.insert((Button::A, false), input_id);
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> std::default::Default for DslState<T> {
+    fn default() -> Self {
+        Self {
+            states: Arc::new(Mutex::new(FxHashMap::default())),
+            inputs: Arc::new(Mutex::new(FxHashMap::default())),
+            outputs: Arc::new(Mutex::new(FxHashMap::default())),
+            state_transitions: Arc::new(Mutex::new(FxHashMap::default())),
+            input_map: Arc::new(Mutex::new(FxHashMap::default())),
+        }
+    }
+}
+
+impl<T: Copy + std::hash::Hash + Eq> DslState<T> {
+    pub fn build(&self) -> Automata<T> {
         let mut builder = self.clone();
 
         let state_names = builder.states.lock();
@@ -33,7 +92,7 @@ impl DslState {
             .map(|(s, i)| (s.to_string(), *i))
             .collect::<FxHashMap<_, _>>();
 
-        let output_names = builder.inputs.lock();
+        let output_names = builder.outputs.lock();
         let output_names = output_names
             .iter()
             .map(|(s, i)| (s.to_string(), *i))
@@ -45,9 +104,10 @@ impl DslState {
                 .iter()
                 .map(|(state_id, ts)| {
                     let ts = ts.lock();
-                    let ts = ts.iter().map(|(input, &(tgt, out))| {
-                        (*input, (tgt, out))
-                    }).collect::<FxHashMap<_,_>>();
+                    let ts = ts
+                        .iter()
+                        .map(|(input, &(tgt, out))| (*input, (tgt, out)))
+                        .collect::<FxHashMap<_, _>>();
 
                     (*state_id, ts)
                 })
@@ -60,116 +120,23 @@ impl DslState {
         let mut states: Vec<State> = Vec::new();
 
         for (state_id, state_ts) in state_transitions.iter() {
-
             let ix = states.len();
-            
+
             let ts: &FxHashMap<InputId, (StateId, Option<OutputId>)> = state_ts;
 
-
             state_map.insert(*state_id, ix);
-
         }
 
-        let active = 0;
-        let inputs = unimplemented!();
-        let outputs = unimplemented!();
-
-        // let states =
-
-        /*
-
-
-
-        let input_count = inputs.len();
-        let mut inputs: FxHashMap<_, InputId> = FxHashMap::default();
-        let mut input_map: FxHashMap<InputId, usize> = FxHashMap::default();
-        for (&input, def) in inputs.iter() {
-            input_map.insert(input, input_map.len());
-            inputs.insert((def.button, def.down), input);
-
-            println!("{:?}", inputs.get(&(def.button, true)));
-            println!("{:?}", inputs.get(&(def.button, false)));
-        }
-        */
-
-        /*
-        let mut inputs_by_ix = input_map.iter().map(|(a, b)| (*a, *b)).collect::<Vec<_>>();
-        inputs_by_ix.sort_by_key(|(_, a)| *a);
-        let inputs_by_ix = inputs_by_ix.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
-
-        println!("input_map.len() {}", input_map.len());
-        println!("inputs.len() {}", inputs.len());
-        let mut outputs: Vec<Output> = Vec::new();
-        */
-
-        /*
-        let mut output_map: FxHashMap<OutputId, usize> = FxHashMap::default();
-        for (&output_id, output) in outputs.iter() {
-            /
-            let mut out_l = output.output.lock();
-            if let Some(out) = out_l.take() {
-                let ix = outputs.len();
-                let id = OutputId(ix);
-
-                outputs.push(out);
-                output_map.insert(id, ix);
-            }
-        }
-        */
-        /*
-        let output_count = outputs.len();
-
-        let state_count = builder.states.len();
-        let mut state_map: FxHashMap<StateId, usize> = FxHashMap::default();
-        let mut counttt =0;
-        for (&id, state) in builder.states.iter() {
-            state_map.insert(id, state_map.len());
-            counttt += 1;
-        }
-        println!("{}\t{}", counttt, state_map.len());
-        */
-
-        /*
-        let mut states = Vec::new();
-
-        let mut state_ids = state_map.iter().map(|(a, b)| (*a, *b)).collect::<Vec<_>>();
-        state_ids.sort_by_key(|(_, b)| *b);
-
-        // println!("what the fuuuuck");
-        println!("{:?}", state_ids);
-
-        let mut count = 0;
-
-
-        for (state_id, ix) in state_ids {
-            assert!(count == ix);
-            count += 1;
-            let def = builder.states.get(&state_id).unwrap();
-
-            let ts = def.transitions.lock();
-
-            let transitions = ts.iter().map(|(k, v)| {
-
-                let tgt = state_map.get(&v.tgt).unwrap();
-
-                let out = v.output;
-
-                (*k, (*tgt, out))
-            }).collect();
-
-
-            let state = State { transitions };
-
-            states.push(state);
-        }
-
-        */
+        let input_map = self.input_map.lock().clone();
 
         Automata {
             active: 0,
             states,
-            inputs,
-            outputs,
+            input_map,
+
+            state_names,
+            input_names,
+            output_names,
         }
     }
 
