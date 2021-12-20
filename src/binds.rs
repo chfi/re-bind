@@ -9,6 +9,20 @@ use anyhow::Result;
 
 const LOOP_DELAY_MS: u64 = 3;
 
+
+
+/*
+#[derive(Default)]
+pub struct Automaton {
+    states: Vec<Vec<Option<usize>>>,
+    outputs: Vec<Vec<Option<Output>>>,
+}
+*/
+
+pub enum Output {
+    Callback(Box<dyn Fn() + Send + Sync + 'static>),
+}
+
 #[derive(Default)]
 pub struct BindMan {
     // tasks: FxHashMap<usize, Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>>
@@ -16,6 +30,7 @@ pub struct BindMan {
     next_id: usize,
 }
 
+// these are basically for triggering outputs, not much else
 #[derive(Clone)]
 pub struct TaskHandle {
     id: usize,
@@ -33,7 +48,7 @@ impl BindMan {
     pub fn spawn<F: Fn() + Send + 'static>(
         &mut self,
         thread_pool: &futures::executor::ThreadPool,
-        f: F,
+        f: F
     ) -> Result<TaskHandle> {
         let id = self.next_id;
 
