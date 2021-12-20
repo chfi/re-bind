@@ -70,60 +70,22 @@ fn main() {
         use sdl2::controller::Button;
         let mut builder = AutomataBuilder::default();
 
-        /*
         let (in_a_down, in_a_up) = builder.new_input(Button::A);
+        let (in_r_down, in_r_up) = builder.new_input(Button::RightShoulder);
 
-        dbg!(in_a_down);
-        dbg!(in_a_up);
-
-        let s_0 = builder.new_state();
-        let s_a = builder.new_state();
-
-        dbg!(s_0.id);
-        dbg!(s_a.id);
-
-        let out_a = builder.new_output();
-        let out_0 = builder.new_output();
-
-        dbg!(out_a.id);
-        dbg!(out_0.id);
-
-        s_0.transition(in_a_down, s_a.id, out_a.id);
-        s_a.transition(in_a_up, s_0.id, out_0.id);
-        */
-        println!("------ inputs -------");
-
-        let (in_a_down, in_a_up) = builder.new_input(Button::A);
-        let (in_r_down, in_r_up) = builder.new_input(Button::B);
-        // let (in_r_down, in_r_up) = builder.new_input(Button::RightShoulder);
-        println!();
-
-        println!("------ outputs -------");
         let out_a = builder.new_output();
         let out_ra = builder.new_output();
-        let out_r = builder.new_output();
-        let out_r0 = builder.new_output();
-        println!();
 
-        println!("------ states -------");
         let s_0 = builder.new_state();
-        println!("state 0: {:?}", s_0.id);
         let s_r = builder.new_state();
-        println!("state B held: {:?}", s_r.id);
         let s_0a = builder.new_state();
-        println!("state 0, A pressed: {:?}", s_0a.id);
         let s_ra = builder.new_state();
-        println!("state B held, A pressed: {:?}", s_ra.id);
-        println!();
 
-        // s_0.silent(in_r_down, s_r.id);
-        s_0.transition(in_r_down, s_r.id, out_r.id);
+        s_0.silent(in_r_down, s_r.id);
         s_0.transition(in_a_down, s_0a.id, out_a.id);
 
-        // s_r.silent(in_r_up, s_0.id);
-        s_r.transition(in_r_up, s_0.id, out_r0.id);
+        s_r.silent(in_r_up, s_0.id);
         s_0a.silent(in_a_up, s_0.id);
-        // s_0a.transition(in_a_up, s_0.id, out_a.id);
 
         s_r.transition(in_a_down, s_ra.id, out_ra.id);
         s_ra.silent(in_a_up, s_r.id);
