@@ -7,6 +7,9 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
+pub mod dsl;
+
+
 use anyhow::Result;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -28,13 +31,6 @@ pub struct TransitionDef {
     // pub input: InputId,
     pub output: Option<OutputId>,
 }
-
-// pub enum Input
-
-// pub struct InputDef {
-//     id: InputId,
-//     button:
-// }
 
 #[derive(Clone)]
 pub struct StateDef {
@@ -79,26 +75,15 @@ pub struct State {
     // callbacks live on the same thread, and be called from the same place, signaled from here
 }
 
+
 /*
-impl State {
-    pub fn from_def(def: StateDef) -> Self {
-        let mut ts_lock = def.transitions.lock();
-        let mut ts: Vec<_> = Vec::new();
-        std::mem::swap(ts_lock.as_mut(), &mut ts);
-
-        let transitions = ts.iter().map(|d| (d.tgt, d.output)).collect();
-
-        Self { transitions }
-    }
-}
-*/
-
 // this could be a more efficient representation, maybe -- or at least fast
 pub struct LilAutomata {
     active: u8,
     states: [State; 256],
     outputs: [Option<OutputId>; 256],
 }
+*/
 
 pub struct Automata<Btn = sdl2::controller::Button> {
     // active: StateId,
@@ -203,31 +188,6 @@ impl Automata {
                 (*k, (*tgt, out))
             }).collect();
 
-            /*
-            let mut transitions = inputs_by_ix.iter().map(|id| {
-                if let Some(tdef) = ts.get(id) {
-                    let tgt = state_map.get(&tdef.tgt).unwrap();
-                    let out = tdef.output;
-                    // println!("state {:?}\tinput {:?}\tdef {:?}", state_id, id, tdef);
-                    // println!("{:?}", (tgt, out));
-                    (*tgt, out)
-                } else {
-                    (ix, None)
-                }
-            }).collect();
-
-
-            println!("state: {:?}\t{:?}", state_id, transitions);
-            */
-
-            // let transitions = ts.iter().enumerate().map(|(ix, transition)| {
-                /*
-            let transitions = ts.iter().map(|(input, t)| {
-                let tgt = state_map.get(&t.tgt).unwrap();
-                let out = t.output;
-                (*tgt, out)
-            }).collect();
-            */
 
             let state = State { transitions };
 
@@ -302,52 +262,3 @@ impl AutomataBuilder {
         def
     }
 }
-
-/*
-
-pub struct Auto<const N: usize> {
-    states: [[Option<usize>; N]; N],
-    outputs: [[Option<Output>; N]; N],
-}
-
-
-// pub struct State {
-//     transitions: Vec<Option<usize>>,
-//     outputs: Vec<Option<Output>>,
-// }
-
-// pub struct StateId(pub usize);
-
-// #[derive(Default)]
-// pub struct Automaton {
-//     states: Vec<State>,
-// }
-
-pub struct StateId(usize);
-pub struct Transition { tgt: StateId, out: Option<Output> }
-
-
-#[derive(Default)]
-pub struct AutoBuilder {
-    states: FxHashMap<usize, Vec<Transition>>,
-
-    transitions: Vec<Transition>,
-}
-
-impl AutoBuilder {
-    pub fn get(&self, id: StateId) -> Option<&Vec<Transition>> {
-        self.states.get(&id.0)
-    }
-
-    pub fn transition(&mut self, src: StateId, tgt: StateId, out: Option<Output>) {
-        let transition = Transition { tgt, out };
-        self.states.entry(src.0).or_default().push(transition);
-    }
-
-    pub fn new_state(&mut self) -> StateId {
-        let id =self.states.len();
-        self.states.insert(id, Vec::new());
-        StateId(id)
-    }
-}
-*/

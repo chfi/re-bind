@@ -7,8 +7,14 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use crate::automata::Automata;
+
 const LOOP_DELAY_MS: u64 = 3;
 
+
+pub struct Binds {
+    automata: Vec<Automata>,
+}
 
 
 /*
